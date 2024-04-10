@@ -31,7 +31,7 @@ auv = mur.mur_init()
 img = auv.get_image_bottom()
 h, w = img.shape[0], img.shape[1]
 x_goal, y_goal = int(w / 2), int(h / 2)
-depth = 3.2
+depth = 2.8
 
 
 def find_contours(img, color):
@@ -301,7 +301,6 @@ def diving_orange_circle(img, cnt_color):
         img = get_picture()
         biggest_cnt, biggest_area = get_biggest_cnt(img, cnt_color)
 
-
         if biggest_area > 100:
             x, y = get_cnt_xy(biggest_cnt)
             lin_y, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.1, k_ang=0.1)
@@ -311,6 +310,40 @@ def diving_orange_circle(img, cnt_color):
                 count += 1
             else:
                 count = 0
+
+    cv2.imshow('drawing', img)
+    cv2.waitKey(1)
+
+
+def move_line(img, cnt_color):
+    global depth
+    count = 0
+    while count < 200:
+        img = get_picture()
+        biggest_cnt, biggest_area = get_biggest_cnt(img, cnt_color)
+
+        if biggest_area > 100:
+
+            rect = cv2.minAreaRect(biggest_cnt)
+            box = cv2.boxPoints(rect)
+            box = np.int0(box)
+            cv2.drawContours(img, [box], 0, (0,0,255), 2)
+
+            # Определяем координаты вершин верхнего ребра
+            top_left_vertex = box[1]
+            top_right_vertex = box[0]
+
+            # Вычисляем координаты середины верхнего ребра
+            midpoint_x = (top_left_vertex[0] + top_right_vertex[0]) // 2
+            midpoint_y = (top_left_vertex[1] + top_right_vertex[1]) // 2
+
+            lin_y, ang_z = go_to_goal(x_goal=midpoint_x, y_goal=midpoint_y, k_lin=0, k_ang=0.2)
+            lin_z = keep_depth(depth, p=-40)
+            moving(linear_x=10, angular_z=ang_z, linear_z=lin_z)
+            # if abs(y - 120) < 5:
+            #     count += 1
+            # else:
+            #     count = 0
 
     cv2.imshow('drawing', img)
     cv2.waitKey(1)
@@ -328,6 +361,8 @@ if __name__ == '__main__':
         # img = auv.get_image_bottom()
         # cv2.line(img, (160, 0), (160, 240), (0, 0, 255), 2)
         # cv2.line(img, (0, 120), (320, 120), (0, 0, 255), 2)
-        diving_orange_circle(img, 'orange')
+        # diving_orange_circle(img, 'orange')
+
+        move_line(img, 'red')
         # cv2.imshow('drawing', img)
         # cv2.waitKey(1)
