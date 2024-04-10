@@ -263,31 +263,44 @@ def go_to_goal(x_goal, y_goal, x=160, y=120, k_lin=0.3, k_ang=-0.2):
     return linear_speed, angular_speed
 
 
+def get_picture():
+    img = auv.get_image_bottom()
+    # cv2.line(img, (160, 0), (160, 240), (0, 0, 255), 2)
+    # cv2.line(img, (0, 120), (320, 120), (0, 0, 255), 2)
+
+    cv2.imshow('drawing', img)
+    cv2.waitKey(1)
+    return img
+
+
+def get_biggest_cnt(img, cnt_color):
+    biggest_cnt = None
+    biggest_area = 0
+    for name in colors:
+        contours = find_contours(img, colors[name])
+
+        if not contours:
+            continue
+
+        for cnt in contours:
+            draw_object_contour(img, cnt, name)
+            if name == cnt_color:
+                area = cv2.contourArea(cnt)
+                color_status = True
+
+                if area > biggest_area:
+                    biggest_area = area
+                    biggest_cnt = cnt
+    return biggest_cnt, biggest_area
+
+
 def diving_orange_circle(img, cnt_color):
     global depth
     count = 0
     while count < 200:
-        img = auv.get_image_bottom()
-        cv2.line(img, (160, 0), (160, 240), (0, 0, 255), 2)
-        cv2.line(img, (0, 120), (320, 120), (0, 0, 255), 2)
-        biggest_cnt = None
-        biggest_area = 0
+        img = get_picture()
+        biggest_cnt, biggest_area = get_biggest_cnt(img, cnt_color)
 
-        for name in colors:
-            contours = find_contours(img, colors[name])
-
-            if not contours:
-                continue
-
-            for cnt in contours:
-                draw_object_contour(img, cnt, name)
-                if name == cnt_color:
-                    area = cv2.contourArea(cnt)
-                    color_status = True
-
-                    if area > biggest_area:
-                        biggest_area = area
-                        biggest_cnt = cnt
 
         if biggest_area > 100:
             x, y = get_cnt_xy(biggest_cnt)
@@ -301,6 +314,7 @@ def diving_orange_circle(img, cnt_color):
 
     cv2.imshow('drawing', img)
     cv2.waitKey(1)
+
 
 colors = {
     'red': ((150, 53, 0), (180, 255, 255)),
