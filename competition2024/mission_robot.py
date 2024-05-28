@@ -12,18 +12,18 @@ vid = cv2.VideoCapture(0)
 ok, frame0 = vid.read()
 img = frame0
 mur_view = auv.get_videoserver()
-
-# course_motor1 = 2
-# course_motor2 = 1
-# depth_motor_1 = 3
-# depth_motor_2 = 0
-# stepper_motor = 4
-
-course_motor1 = 0
+ang_z =0 
+course_motor1 = 2
 course_motor2 = 1
-depth_motor_1 = 2
-depth_motor_2 = 3
+depth_motor_1 = 3
+depth_motor_2 = 0
 stepper_motor = 4
+
+#course_motor1 = 0
+#course_motor2 = 1
+#depth_motor_1 = 2
+#depth_motor_2 = 3
+#stepper_motor = 4
 
 ellipce_area = 0
 i_component = 0
@@ -35,7 +35,7 @@ auv = mur.mur_init()
 # img = auv.get_image_bottom()
 # h, w = img.shape[0], img.shape[1]
 # x_goal, y_goal = int(w / 2), int(h / 2)
-depth = 2.8
+depth = 0.50
 
 
 def find_contours(img, color):
@@ -232,7 +232,7 @@ def to_360(angle):
     return angle if angle > 0.0 else angle + 360.0
 
 
-def keep_angle(goal_angle, p=0.2, i=0.5, d=0.01):
+def keep_angle(goal_angle, p=0.05, i=0, d=0.01):
     current_angle = to_360(auv.get_yaw())
     print('current_angle:', current_angle)
     goal_angle = to_360(goal_angle)
@@ -254,7 +254,7 @@ def rad_to_deg(rad):
 
 def go_to_goal(x_goal, y_goal, x=160, y=120, k_lin=0.3, k_ang=-0.2):
     yaw = auv.get_yaw()
-    distance = abs(math.sqrt(((x_goal - x) ** 2) + ((y_goal - y) ** 2)))
+    distance = abs(math.sqrt(((x_goal - x) * 2) + ((y_goal - y) * 2)))
     k_lin = -k_lin if y_goal - y > 0 else k_lin
     k_ang = -k_ang if x_goal - x > 0 else k_ang
     linear_speed = limiter(distance * k_lin)
@@ -276,6 +276,7 @@ def get_picture():
     img = frame0
     # cv2.imshow('drawing', img)
     # cv2.waitKey(1)
+    
     return img
 
 
@@ -327,10 +328,10 @@ def move_line(img, cnt_color):
     while count < 200:
         img = get_picture()
         biggest_cnt, biggest_area = get_biggest_cnt(img, cnt_color)
-
+        ang_z=5
         if biggest_area > 100:
 
-            rect = cv2.minAreaRect(biggest_cnt)
+            rect = cv2.minAreaRect(biggest_cnt) 
             box = cv2.boxPoints(rect)
             box = np.int0(box)
             cv2.drawContours(img, [box], 0, (0,0,255), 2)
@@ -343,9 +344,12 @@ def move_line(img, cnt_color):
             midpoint_x = (top_left_vertex[0] + top_right_vertex[0]) // 2
             midpoint_y = (top_left_vertex[1] + top_right_vertex[1]) // 2
 
-            lin_y, ang_z = go_to_goal(x_goal=midpoint_x, y_goal=midpoint_y, k_lin=0, k_ang=0.2)
-            lin_z = keep_depth(depth, p=-40)
-            moving(linear_x=10, angular_z=ang_z, linear_z=lin_z)
+            # lin_y, ang_z = go_to_goal(x_goal=midpoint_x, y_goal=midpoint_y, k_lin=0, k_ang=0.1)
+            angle = calc_angle(img, biggest_cnt)
+            ang_z = keep_angle(angle)
+        lin_z = keep_depth(depth, p=-40)
+        moving(linear_x=-10, angular_z=ang_z, linear_z=lin_z)    
+        mur_view.show(img, 0)
             # if abs(y - 120) < 5:
             #     count += 1
             # else:
@@ -354,22 +358,48 @@ def move_line(img, cnt_color):
     # cv2.imshow('drawing', img)
     # cv2.waitKey(1)
 
+def calc_angle(drawing, cnt):
+    try:
+        rectangle = cv2.minAreaRect(cnt)
+
+        box = cv2.boxPoints(rectangle)
+        box = np.int0(box)
+        cv2.drawContours(drawing, [box], 0, (0, 255, 0), 3)
+
+        # К сожалению, мы не можем использовать тот угол,
+        # который входит в вывод функции minAreaRect,
+        # т.к. нам необходимо ориентироваться именно по
+        # длинной стороне полоски. Находим длинную сторону.
+
+        edge_first = np.int0((box[1][0] - box[0][0], box[1][1] - box[0][1]))
+        edge_second = np.int0((box[2][0] - box[1][0], box[2][1] - box[1][1]))
+
+        edge = edge_first
+        if cv2.norm(edge_second) > cv2.norm(edge_first):
+            edge = edge_second
+
+        # Вычисляем угол по длинной стороне.
+        angle = -((180.0 / math.pi * math.acos(edge[0] / (cv2.norm((1, 0)) * cv2.norm(edge))))- 90)
+
+        return angle if not math.isnan(angle) else 0
+    except:
+        return 0
 
 colors = {
-    'red': ((150, 53, 0), (180, 255, 255)),
-    'orange': ((8, 0, 0), (13, 255, 255)),
-    'yellow': ((15, 53, 0), (93, 255, 255)),
-    'black': ((0, 0, 0), (0, 0, 20))
+#    'red': ((0, 0, 0), (76, 255, 255)),
+#   'orange': ((8, 0, 0), (13, 255, 255)),
+    'yellow': ((14, 43, 65), (99, 146, 171)),
+#    'yellow': ((18, 48, 58), (65, 255, 203)),                                                      
+#    'black': ((0, 0, 0), (0, 0, 20))
 }
 
-if __name__ == '__main__':
+if _name_ == '_main_':
     while True:
         # img = auv.get_image_bottom()
         # cv2.line(img, (160, 0), (160, 240), (0, 0, 255), 2)
         # cv2.line(img, (0, 120), (320, 120), (0, 0, 255), 2)
-        # diving_orange_circle(img, 'orange')
-
-        move_line(img, 'red')
+        #diving_orange_circle(img, 'orange')
+        move_line(img, 'yellow')
+        
         # cv2.imshow('drawing', img)
         # cv2.waitKey(1)
-        
