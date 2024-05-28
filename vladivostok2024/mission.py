@@ -376,12 +376,12 @@ def move_line(cnt_color):
             angle = calc_angle(img, biggest_cnt)
             # ang_z = keep_angle(angle, p=-0.2)
             lin_z = keep_depth(depth, p=-40)
-            moving(linear_x=5, angular_z=ang_z, linear_z=lin_z)
+            moving(linear_x=10, angular_z=ang_z, linear_z=lin_z)
             print(angle)
             count += 1
-            if is_contour(img, 'square', 'yellow') and count > 100:
+            print(count)
+            if is_contour(img, 'square', 'yellow') and count > 200:
                 break
-
 
 
 colors = {
@@ -415,8 +415,8 @@ def diving_yellow_square(cnt_color, error_position):
             x, y = get_cnt_xy(biggest_cnt)
             lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.25, k_ang=0.01)
             lin_z = keep_depth(depth, p=-40)
-            moving(linear_x=lin_x, angular_z=ang_z * 0.5, linear_z=lin_z)
-            if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
+            moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
+            if abs(x - 160) < error_position and abs(lin_z) < 10:
                 count += 1
                 print('count = ', count)
             else:
@@ -434,7 +434,13 @@ if __name__ == '__main__':
     diving_orange_circle('orange', error_position=30)
     move_line('red')
     diving_yellow_square('yellow', error_position=30)
-    # turn_to_line('red', 30)
+    move_line('red')
+    diving_yellow_square('yellow', error_position=30)
+    move_line('red')
+    diving_yellow_square('black', error_position=30)
+    move_line('red')
+
+    diving_yellow_square('yellow', error_position=30)
     move_line('red')
     diving_yellow_square('yellow', error_position=30)
     print('THE END')
