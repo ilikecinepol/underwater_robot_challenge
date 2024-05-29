@@ -376,11 +376,15 @@ def move_line(cnt_color):
             angle = calc_angle(img, biggest_cnt)
             # ang_z = keep_angle(angle, p=-0.2)
             lin_z = keep_depth(depth, p=-40)
-            moving(linear_x=10, angular_z=ang_z, linear_z=lin_z)
+            moving(linear_x=5, angular_z=ang_z, linear_z=lin_z)
             print(angle)
             count += 1
             print(count)
             if is_contour(img, 'square', 'yellow') and count > 200:
+                break
+            if is_contour(img, 'square', 'black') and count > 200:
+                break
+            if is_contour(img, 'triangle', 'yellow') and count > 200:
                 break
 
 
