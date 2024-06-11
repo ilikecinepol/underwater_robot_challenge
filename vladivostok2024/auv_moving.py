@@ -198,11 +198,9 @@ def process_cnt(cnt, img):
     circle_area = circle_radius ** 2 * math.pi
     circle = cv2.minAreaRect(cnt)
     circ_w, circ_h = circle[1][0], circle[1][1]
-    # aspect_ratio = max(circ_w, circ_h) / min(circ_w, circ_h)
 
     # Описанный прямоугольник (с вращением)
     rectangle = cv2.minAreaRect(cnt)
-    # print('rectangle = ', rectangle)
 
     # Получим контур описанного прямоугольника
     box = cv2.boxPoints(rectangle)
@@ -218,9 +216,12 @@ def process_cnt(cnt, img):
 
     # Описанный треугольник
     try:
-        triangle = cv2.minEnclosingTriangle(cnt)[1]
-        triangle = np.int0(triangle)
-        triangle_area = cv2.contourArea(triangle)
+        retval, triangle = cv2.minEnclosingTriangle(cnt)
+        if retval:
+            triangle = np.int0(triangle)
+            triangle_area = cv2.contourArea(triangle)
+        else:
+            triangle_area = 0
     except:
         triangle_area = 0
 
@@ -260,7 +261,7 @@ def process_cnt(cnt, img):
     if shape_name == 'rectangle' or shape_name == 'square':
         cv2.drawContours(drawing, [box], 0, line_color, 2, cv2.LINE_AA)
 
-    if shape_name == 'triangle':
+    if shape_name == 'triangle' and triangle is not None:
         cv2.drawContours(drawing, [triangle], 0, line_color, 2, cv2.LINE_AA)
 
     if shape_name == 'ellipce':
@@ -355,6 +356,7 @@ def turn_to_line(cnt_color, error_position):
 def move_line(cnt_color):
     global depth
     count = 0
+    counto = 0
     while True:
         img = get_picture()
         biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
@@ -378,10 +380,28 @@ def move_line(cnt_color):
             lin_z = keep_depth(depth, p=-40)
             moving(linear_x=5, angular_z=ang_z, linear_z=lin_z)
             print(angle)
-            count += 1
-            if is_contour(img, 'square', 'yellow') and count > 100:
-                break
+            counto += 1
+            print(count)
+            print(counto)
+            if is_contour(img, 'square', 'yellow'):
+                count += 1
+                if count > 200:
+                    count = 0
+                    break
 
+
+            elif is_contour(img, 'square', 'black') and counto > 200:
+                count += 1
+                if count > 160:
+                    count = 0
+                    break
+
+
+            elif is_contour(img, 'triangle', 'yellow') and counto > 200:
+                count += 1
+                if count > 200:
+                    count = 0
+                    break
 
 
 colors = {
@@ -403,6 +423,12 @@ def is_contour(img, figure, cnt_color):
     else:
         return False
 
+def number(img, shape):
+    biggest_cnt, biggest_area, shape = get_biggest_cnt(img)
+    box = cv2.boxPoints(shape)
+    print(box)
+
+
 
 def diving_yellow_square(cnt_color, error_position):
     global depth
@@ -415,8 +441,8 @@ def diving_yellow_square(cnt_color, error_position):
             x, y = get_cnt_xy(biggest_cnt)
             lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.25, k_ang=0.01)
             lin_z = keep_depth(depth, p=-40)
-            moving(linear_x=lin_x, angular_z=ang_z * 0.5, linear_z=lin_z)
-            if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
+            moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
+            if abs(x - 160) < error_position and abs(lin_z) < 10:
                 count += 1
                 print('count = ', count)
             else:
@@ -434,9 +460,16 @@ if __name__ == '__main__':
     diving_orange_circle('orange', error_position=30)
     move_line('red')
     diving_yellow_square('yellow', error_position=30)
-    # turn_to_line('red', 30)
     move_line('red')
     diving_yellow_square('yellow', error_position=30)
+    move_line('red')
+    diving_yellow_square('black', error_position=30)
+    move_line('red')
+
+    diving_yellow_square('yellow', error_position=30)
+    move_line('red')
+    diving_yellow_square('yellow', error_position=30)
+    move_line('red')
     print('THE END')
     # while True:
-    #     moving(linear_x=100)
+    #moving(linear_x=100)
