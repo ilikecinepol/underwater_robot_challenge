@@ -198,9 +198,11 @@ def process_cnt(cnt, img):
     circle_area = circle_radius ** 2 * math.pi
     circle = cv2.minAreaRect(cnt)
     circ_w, circ_h = circle[1][0], circle[1][1]
+    # aspect_ratio = max(circ_w, circ_h) / min(circ_w, circ_h)
 
     # Описанный прямоугольник (с вращением)
     rectangle = cv2.minAreaRect(cnt)
+    # print('rectangle = ', rectangle)
 
     # Получим контур описанного прямоугольника
     box = cv2.boxPoints(rectangle)
@@ -216,12 +218,9 @@ def process_cnt(cnt, img):
 
     # Описанный треугольник
     try:
-        retval, triangle = cv2.minEnclosingTriangle(cnt)
-        if retval:
-            triangle = np.int0(triangle)
-            triangle_area = cv2.contourArea(triangle)
-        else:
-            triangle_area = 0
+        triangle = cv2.minEnclosingTriangle(cnt)[1]
+        triangle = np.int0(triangle)
+        triangle_area = cv2.contourArea(triangle)
     except:
         triangle_area = 0
 
@@ -261,7 +260,7 @@ def process_cnt(cnt, img):
     if shape_name == 'rectangle' or shape_name == 'square':
         cv2.drawContours(drawing, [box], 0, line_color, 2, cv2.LINE_AA)
 
-    if shape_name == 'triangle' and triangle is not None:
+    if shape_name == 'triangle':
         cv2.drawContours(drawing, [triangle], 0, line_color, 2, cv2.LINE_AA)
 
     if shape_name == 'ellipce':
@@ -392,7 +391,7 @@ def move_line(cnt_color):
 
             elif is_contour(img, 'square', 'black') and counto > 200:
                 count += 1
-                if count > 160:
+                if count > 50:
                     count = 0
                     break
 
@@ -469,7 +468,6 @@ if __name__ == '__main__':
     diving_yellow_square('yellow', error_position=30)
     move_line('red')
     diving_yellow_square('yellow', error_position=30)
-    move_line('red')
     print('THE END')
     # while True:
     #moving(linear_x=100)
