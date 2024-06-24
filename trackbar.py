@@ -44,6 +44,6 @@ if __name__ == '__main__':
     cv2.createTrackbar('s_max', 'ui', 255, 255, update)
     cv2.createTrackbar('v_max', 'ui', 255, 255, update)
     while True:
-        img = cv2.imread('C:\Python_code\mur_challenge\Screenshot_1.png')
+        img = cv2.imread('1112.png')
         update()
         pressed_key = cv2.waitKey(1)
