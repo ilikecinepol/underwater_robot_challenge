@@ -33,8 +33,25 @@ h, w = img.shape[0], img.shape[1]
 x_goal, y_goal = int(w / 2), int(h / 2)
 depth = 3
 
+colors = {
+    'red': ((150, 53, 0), (180, 255, 255)),
+    'orange': ((8, 0, 0), (13, 255, 255)),
+    'yellow': ((24, 31, 34), (67, 255, 233)),
+    'black': ((0, 0, 0), (0, 0, 20))
+}
+
 
 def find_contours(img, color):
+    """
+    Находит контуры в изображении для указанного цветового диапазона.
+
+    Args:
+        img (numpy.ndarray): Входное изображение.
+        color (tuple): Цветовой диапазон в формате HSV (нижняя граница, верхняя граница).
+
+    Returns:
+        list: Список найденных контуров.
+    """
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     img_mask = cv2.inRange(img_hsv, color[0], color[1])
     contours, _ = cv2.findContours(img_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -43,6 +60,15 @@ def find_contours(img, color):
 
 
 def get_cnt_xy(contour):
+    """
+    Вычисляет центр тяжести контура.
+
+    Args:
+        contour (numpy.ndarray): Контур для вычисления центра тяжести.
+
+    Returns:
+        tuple: Координаты (x, y) центра тяжести контура.
+    """
     moments = cv2.moments(contour)
     x = int(moments['m10'] / moments['m00'])
     y = int(moments['m01'] / moments['m00'])
@@ -50,6 +76,14 @@ def get_cnt_xy(contour):
 
 
 def draw_object_contour(drawing, contour, name):
+    """
+    Рисует контур и его название на изображении, если площадь контура значительная.
+
+    Args:
+        drawing (numpy.ndarray): Изображение для рисования.
+        contour (numpy.ndarray): Контур для рисования.
+        name (str): Имя, отображаемое рядом с контуром.
+    """
     if cv2.contourArea(contour) < 500:
         return
 
@@ -80,10 +114,32 @@ def get_contour_xy(cnt):
 
 
 def limiter(value, min=-100, max=100):
+    """
+    Ограничивает значение в пределах заданного диапазона.
+
+    Args:
+        value (float): Значение для ограничения.
+        min (float): Минимальное значение.
+        max (float): Максимальное значение.
+
+    Returns:
+        float: Ограниченное значение.
+    """
     return min if value < min else max if value > max else value
 
 
 def moving(linear_x=0, linear_y=0, linear_z=0, angular_x=0, angular_y=0, angular_z=0):
+    """
+    Управляет движением подводного аппарата.
+
+    Args:
+        linear_x (float): Линейное движение по оси X.
+        linear_y (float): Линейное движение по оси Y.
+        linear_z (float): Линейное движение по оси Z.
+        angular_x (float): Угловое движение по оси X.
+        angular_y (float): Угловое движение по оси Y.
+        angular_z (float): Угловое движение по оси Z.
+    """
     global course_motor1, course_motor2, depth_motor1, depth_motor2, stepper_motor
     auv.set_motor_power(course_motor1, limiter(linear_x) + angular_z)
     auv.set_motor_power(course_motor2, limiter(linear_x) - angular_z)
@@ -93,6 +149,20 @@ def moving(linear_x=0, linear_y=0, linear_z=0, angular_x=0, angular_y=0, angular
 
 
 def pid_controller(value, setpoint, p=0, i=0, d=0, delta_error=0.05):
+    """
+    ПИД-контроллер для управления подводным аппаратом.
+
+    Args:
+        value (float): Текущее значение.
+        setpoint (float): Желаемое значение.
+        p (float): Пропорциональный коэффициент.
+        i (float): Интегральный коэффициент.
+        d (float): Дифференциальный коэффициент.
+        delta_error (float): Порог ошибки.
+
+    Returns:
+        float: Выходное значение контроллера.
+    """
     global last_error, i_component
     eror = setpoint - value
     if abs(eror) > delta_error:
@@ -108,10 +178,31 @@ def pid_controller(value, setpoint, p=0, i=0, d=0, delta_error=0.05):
 
 
 def to_360(angle):
+    """
+    Преобразует угол в диапазон от 0 до 360 градусов.
+
+    Args:
+        angle (float): Угол в градусах.
+
+    Returns:
+        float: Угол в диапазоне от 0 до 360 градусов.
+    """
     return angle if angle > 0.0 else angle + 360.0
 
 
 def keep_angle(goal_angle, p=0.2, i=0.5, d=0.01):
+    """
+    Поддерживает заданный угол курса подводного аппарата.
+
+    Args:
+        goal_angle (float): Желаемый угол.
+        p (float): Пропорциональный коэффициент.
+        i (float): Интегральный коэффициент.
+        d (float): Дифференциальный коэффициент.
+
+    Returns:
+        float: Мощность для управления курсом.
+    """
     current_angle = to_360(auv.get_yaw())
     print('current_angle:', current_angle)
     goal_angle = to_360(goal_angle)
@@ -121,6 +212,18 @@ def keep_angle(goal_angle, p=0.2, i=0.5, d=0.01):
 
 
 def keep_depth(goal_depth=0, p=-50, i=-5, d=0.1):
+    """
+    Поддерживает заданную глубину подводного аппарата.
+
+    Args:
+        goal_depth (float): Желаемая глубина.
+        p (float): Пропорциональный коэффициент.
+        i (float): Интегральный коэффициент.
+        d (float): Дифференциальный коэффициент.
+
+    Returns:
+        float: Ограниченная мощность для управления глубиной.
+    """
     current_depth = auv.get_depth()
     # print('current_depth', current_depth)
     power = pid_controller(current_depth, goal_depth, p=p, i=i, d=d)
@@ -132,6 +235,20 @@ def rad_to_deg(rad):
 
 
 def go_to_goal(x_goal, y_goal, x=160, y=120, k_lin=0.3, k_ang=-0.2):
+    """
+    Направляет подводный аппарат к заданной цели.
+
+    Args:
+        x_goal (float): Координата X цели.
+        y_goal (float): Координата Y цели.
+        x (float): Текущая координата X.
+        y (float): Текущая координата Y.
+        k_lin (float): Коэффициент линейной скорости.
+        k_ang (float): Коэффициент угловой скорости.
+
+    Returns:
+        tuple: Линейная и угловая скорости.
+    """
     yaw = auv.get_yaw()
     distance = abs(math.sqrt(((x_goal - x) ** 2) + ((y_goal - y) ** 2)))
     k_lin = -k_lin if y_goal - y > 0 else k_lin
@@ -147,16 +264,37 @@ def go_to_goal(x_goal, y_goal, x=160, y=120, k_lin=0.3, k_ang=-0.2):
 
 
 def get_picture():
-    img = auv.get_image_bottom()
-    # cv2.line(img, (160, 0), (160, 240), (0, 0, 255), 2)
-    # cv2.line(img, (0, 120), (320, 120), (0, 0, 255), 2)
+    """
+    Направляет подводный аппарат к заданной цели.
 
+    Args:
+        x_goal (float): Координата X цели.
+        y_goal (float): Координата Y цели.
+        x (float): Текущая координата X.
+        y (float): Текущая координата Y.
+        k_lin (float): Коэффициент линейной скорости.
+        k_ang (float): Коэффициент угловой скорости.
+
+    Returns:
+        tuple: Линейная и угловая скорости.
+    """
+    img = auv.get_image_bottom()
     cv2.imshow('drawing', img)
     cv2.waitKey(1)
     return img
 
 
 def get_biggest_cnt(img, cnt_color):
+    """
+    Находит самый большой контур в изображении для указанного цвета.
+
+    Args:
+        img (numpy.ndarray): Входное изображение.
+        cnt_color (str): Имя цвета для фильтрации контуров.
+
+    Returns:
+        tuple: (самый большой контур, площадь, имя фигуры, статус цвета)
+    """
     global ellipce_area
     color_status = None
     biggest_cnt = None
@@ -182,6 +320,16 @@ def get_biggest_cnt(img, cnt_color):
 
 
 def process_cnt(cnt, img):
+    """
+    Обрабатывает контур для определения его площади и формы.
+
+    Args:
+        cnt (numpy.ndarray): Контур для обработки.
+        img (numpy.ndarray): Входное изображение.
+
+    Returns:
+        tuple: (площадь, имя формы, None)
+    """
     global ellipce_area
     area = cv2.contourArea(cnt)
     drawing = np.zeros_like(img)
@@ -198,11 +346,9 @@ def process_cnt(cnt, img):
     circle_area = circle_radius ** 2 * math.pi
     circle = cv2.minAreaRect(cnt)
     circ_w, circ_h = circle[1][0], circle[1][1]
-    # aspect_ratio = max(circ_w, circ_h) / min(circ_w, circ_h)
 
     # Описанный прямоугольник (с вращением)
     rectangle = cv2.minAreaRect(cnt)
-    # print('rectangle = ', rectangle)
 
     # Получим контур описанного прямоугольника
     box = cv2.boxPoints(rectangle)
@@ -218,9 +364,12 @@ def process_cnt(cnt, img):
 
     # Описанный треугольник
     try:
-        triangle = cv2.minEnclosingTriangle(cnt)[1]
-        triangle = np.int0(triangle)
-        triangle_area = cv2.contourArea(triangle)
+        retval, triangle = cv2.minEnclosingTriangle(cnt)
+        if retval:
+            triangle = np.int0(triangle)
+            triangle_area = cv2.contourArea(triangle)
+        else:
+            triangle_area = 0
     except:
         triangle_area = 0
 
@@ -260,7 +409,7 @@ def process_cnt(cnt, img):
     if shape_name == 'rectangle' or shape_name == 'square':
         cv2.drawContours(drawing, [box], 0, line_color, 2, cv2.LINE_AA)
 
-    if shape_name == 'triangle':
+    if shape_name == 'triangle' and triangle is not None:
         cv2.drawContours(drawing, [triangle], 0, line_color, 2, cv2.LINE_AA)
 
     if shape_name == 'ellipce':
@@ -286,6 +435,16 @@ def process_cnt(cnt, img):
 
 
 def calc_angle(drawing, cnt):
+    """
+    Вычисляет угол ориентации объекта по его контуру.
+
+    Args:
+        drawing (numpy.ndarray): Изображение для рисования контура.
+        cnt (numpy.ndarray): Контур объекта.
+
+    Returns:
+        float: Угол ориентации объекта в градусах.
+    """
     try:
         rectangle = cv2.minAreaRect(cnt)
 
@@ -353,8 +512,9 @@ def turn_to_line(cnt_color, error_position):
 
 
 def move_line(cnt_color):
-    global depth
+    global depth, fig
     count = 0
+    counto = 0
     while True:
         img = get_picture()
         biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
@@ -378,18 +538,35 @@ def move_line(cnt_color):
             lin_z = keep_depth(depth, p=-40)
             moving(linear_x=5, angular_z=ang_z, linear_z=lin_z)
             print(angle)
-            count += 1
-            if is_contour(img, 'square', 'yellow') and count > 100:
+            counto += 1
+            print(count)
+            print(counto)
+            if is_contour(img, 'square', 'yellow'):
+                count += 1
+
+
+                if count > 200:
+                    count = 0
+                    diving_yellow_square('yellow')
+                    fig += 1
+                    break
                 break
 
 
+            elif is_contour(img, 'square', 'black') and counto > 200:
+                count += 1
+                diving_yellow_square('black')
+                if count > 160:
+                    count = 0
+                    break
 
-colors = {
-    'red': ((150, 53, 0), (180, 255, 255)),
-    'orange': ((8, 0, 0), (13, 255, 255)),
-    'yellow': ((24, 31, 34), (67, 255, 233)),
-    'black': ((0, 0, 0), (0, 0, 20))
-}
+
+            elif is_contour(img, 'triangle', 'yellow') and counto > 200:
+                count += 1
+                diving_yellow_square('yellow')
+                if count > 200:
+                    count = 0
+                    break
 
 
 # Функция поиска нужного контура
@@ -404,7 +581,13 @@ def is_contour(img, figure, cnt_color):
         return False
 
 
-def diving_yellow_square(cnt_color, error_position):
+def number(img, shape):
+    biggest_cnt, biggest_area, shape = get_biggest_cnt(img)
+    box = cv2.boxPoints(shape)
+    print(box)
+
+
+def diving_yellow_square(cnt_color, error_position=30):
     global depth
     count = 0
     while count < 100:
@@ -415,8 +598,8 @@ def diving_yellow_square(cnt_color, error_position):
             x, y = get_cnt_xy(biggest_cnt)
             lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.25, k_ang=0.01)
             lin_z = keep_depth(depth, p=-40)
-            moving(linear_x=lin_x, angular_z=ang_z * 0.5, linear_z=lin_z)
-            if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
+            moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
+            if abs(x - 160) < error_position and abs(lin_z) < 10:
                 count += 1
                 print('count = ', count)
             else:
@@ -424,19 +607,21 @@ def diving_yellow_square(cnt_color, error_position):
     auv.drop()
 
 
-colors = {
-    'red': ((150, 53, 0), (180, 255, 255)),
-    'orange': ((8, 0, 0), (13, 255, 255)),
-    'yellow': ((24, 31, 34), (67, 255, 233)),
-    'black': ((0, 0, 0), (0, 0, 20))
-}
 if __name__ == '__main__':
     diving_orange_circle('orange', error_position=30)
-    move_line('red')
-    diving_yellow_square('yellow', error_position=30)
-    # turn_to_line('red', 30)
-    move_line('red')
-    diving_yellow_square('yellow', error_position=30)
-    print('THE END')
-    # while True:
-    #     moving(linear_x=100)
+    fig = 0
+    while fig < 5:
+        move_line('red')
+    # diving_yellow_square('yellow', error_position=30)
+    # move_line('red')
+    # diving_yellow_square('yellow', error_position=30)
+    # move_line('red')
+    # diving_yellow_square('black', error_position=30)
+    # move_line('red')
+    #
+    # diving_yellow_square('yellow', error_position=30)
+    # move_line('red')
+    # diving_yellow_square('yellow', error_position=30)
+    # move_line('red')
+    # print('THE END')
+
