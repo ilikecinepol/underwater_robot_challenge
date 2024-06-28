@@ -8,7 +8,7 @@ import time
 
 auv = mur.mur_init()
 
-robot = 'robot'
+robot = 'simulator'
 camera = 'bottom'
 if robot == 'simulator':
     course_motor1 = 0
@@ -18,10 +18,10 @@ if robot == 'simulator':
     stepper_motor = 4
     img = auv.get_image_bottom()
     colors = {
-        'red': ((150, 53, 0), (180, 255, 255)),
+        'red': ((172, 75, 64), (180, 250, 191)),
         'orange': ((8, 0, 0), (13, 255, 255)),
-        'yellow': ((24, 31, 34), (67, 255, 233)),
-        'black': ((0, 0, 0), (0, 0, 20))
+        'yellow': ((18, 150, 135), (42, 255, 255)),
+        'black': ((0, 0, 1), (180, 255, 86))
     }
 elif robot == 'robot':
     course_motor1 = 2
@@ -46,7 +46,6 @@ elif robot == 'robot':
         'black': ((0, 0, 0), (0, 0, 20))
     }
 
-print('exit')
 
 ellipce_area = 0
 i_component = 0
@@ -171,11 +170,12 @@ def go_to_goal(x_goal, y_goal, x=160, y=120, k_lin=0.3, k_ang=-0.2):
     return linear_speed, angular_speed
 
 
-def get_picture(robot='simulator', camera='bootom'):
-    print(robot, camera)
+def get_picture(robot='simulator', camera='bottom'):
+    # print(robot, camera)
     if robot == 'simulator':
         if camera == 'bottom':
             img = auv.get_image_bottom()
+
         elif camera == 'front':
             img = auv.get_image_front()
         cv2.imshow('drawing', img)
@@ -195,7 +195,8 @@ def get_picture(robot='simulator', camera='bootom'):
     return img
 
 
-def get_biggest_cnt(img, cnt_color):
+def get_biggest_cnt(img, cnt_color, max_area=0):
+    shape_name = None
     global ellipce_area
     color_status = None
     biggest_cnt = None
@@ -210,13 +211,14 @@ def get_biggest_cnt(img, cnt_color):
             draw_object_contour(img, cnt, name)
             # Process contour
             area, shape_name, drawing = process_cnt(cnt, img)
+
             if name == cnt_color:
                 color_status = cnt_color
 
-                if area > biggest_area:
+                if area > biggest_area and area > max_area:
                     biggest_area = area
                     biggest_cnt = cnt
-
+    print('contour: area = ', biggest_area, 'shape = ', shape_name, 'color = ', color_status)
     return biggest_cnt, biggest_area, shape_name, color_status
 
 
@@ -371,24 +373,24 @@ def diving_orange_circle(cnt_color, error_position):
                 count = 0
 
 
-def turn_to_line(cnt_color, error_position):
-    global depth
-    count = 0
-    while count < 200:
-        img = get_picture()
-        biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
-
-        if biggest_area > 50:
-            x, y = get_cnt_xy(biggest_cnt)
-            lin_y, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.5, k_ang=0.1)
-            lin_z = keep_depth(depth, p=-40)
-            moving(linear_x=10, angular_z=ang_z, linear_z=lin_z)
-            # print('main circle')
-            if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
-                count += 1
-                print('count = ', count)
-            else:
-                count = 0
+# def turn_to_line(cnt_color, error_position):
+#     global depth
+#     count = 0
+#     while count < 200:
+#         img = get_picture()
+#         biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
+#
+#         if biggest_area > 50:
+#             x, y = get_cnt_xy(biggest_cnt)
+#             lin_y, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.5, k_ang=0.1)
+#             lin_z = keep_depth(depth, p=-40)
+#             moving(linear_x=10, angular_z=ang_z, linear_z=lin_z)
+#             # print('main circle')
+#             if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
+#                 count += 1
+#                 print('count = ', count)
+#             else:
+#                 count = 0
 
 
 def move_line(cnt_color):
@@ -412,17 +414,18 @@ def move_line(cnt_color):
             midpoint_x = (top_left_vertex[0] + top_right_vertex[0]) // 2
             midpoint_y = (top_left_vertex[1] + top_right_vertex[1]) // 2
 
-            lin_y, ang_z = go_to_goal(x_goal=midpoint_x, y_goal=midpoint_y, k_lin=0, k_ang=0.05)
+            lin_y, ang_z = go_to_goal(x_goal=midpoint_x, y_goal=midpoint_y, k_lin=0, k_ang=0.1)
             # angle = calc_angle(img, biggest_cnt)
             # ang_z = keep_angle(angle, p=-0.2)
             lin_z = keep_depth(depth, p=-40)
             lin_x = 5
-            # moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
+            moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
             # print(angle)
             counto += 1
             # print(count)
             # print(counto)
-            if is_contour(img, 'square', 'yellow'):
+            print('counto = ', counto)
+            if is_contour(img, 'square', 'yellow') and counto > 200:
                 count += 1
                 if count > 200:
                     counto = 0
@@ -431,9 +434,15 @@ def move_line(cnt_color):
 
             elif is_contour(img, 'square', 'black') and counto > 200:
                 count += 1
-                if count > 200:
+                if count > 100:
                     counto = 0
                     return 'black'
+
+            # elif is_contour(img, 'triangle', 'black') and counto > 200:
+            #     count += 1
+            #     if count > 200:
+            #         counto = 0
+            #         return 'black'
 
 
             elif is_contour(img, 'triangle', 'yellow') and counto > 200:
@@ -448,7 +457,7 @@ def move_line(cnt_color):
             #     elif is_contour(img, 'triangle', 'black'):
             #         return 'black'
             #     print('line exit')
-            mur_view.show(img)
+            # mur_view.show(img)
 
 
 
@@ -456,10 +465,14 @@ def move_line(cnt_color):
 
 # Функция поиска нужного контура
 def is_contour(img, figure, cnt_color):
-    biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
+    if cnt_color == 'black':
+        max_area = 600
+    else:
+        max_area = 0
+    biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color, max_area)
     # cv2.imshow('d', img)
     # cv2.waitKey(1)
-    print(shape, cnt_color)
+    # print(shape, cnt_color)
     if shape == figure and color == cnt_color:
         return True
     else:
@@ -481,7 +494,7 @@ def diving_yellow_square(cnt_color, error_position):
 
         if biggest_area > 100:
             x, y = get_cnt_xy(biggest_cnt)
-            lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.25, k_ang=0.05)
+            lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.25, k_ang=0.1)
             lin_z = keep_depth(depth, p=-40)
             moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
             if abs(x - 160) < error_position and abs(lin_z) < 10:
@@ -492,17 +505,11 @@ def diving_yellow_square(cnt_color, error_position):
     auv.drop()
 
 
-colors = {
-    'red': ((150, 53, 0), (180, 255, 255)),
-    'orange': ((8, 0, 0), (13, 255, 255)),
-    'yellow': ((24, 31, 34), (67, 255, 233)),
-    'black': ((0, 0, 0), (162, 255, 94)),
-}
 
 if __name__ == '__main__':
-    # diving_orange_circle('orange', error_position=30)
-    for i in range(5):
+    diving_orange_circle('orange', error_position=30)
+    for i in range(6):
         col = move_line('red')
         print(col)
         diving_yellow_square(col, 30)
-        mur_view.show(img, 0)
+        # mur_view.show(img, 0)
