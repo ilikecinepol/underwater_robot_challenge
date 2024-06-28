@@ -36,23 +36,27 @@ if __name__ == '__main__':
     cv2.createTrackbar('h_max', 'ui', 180, 180, update)
     cv2.createTrackbar('s_max', 'ui', 255, 255, update)
     cv2.createTrackbar('v_max', 'ui', 255, 255, update)
+
+    # Использование видеоролика
+    video_path = 'pool.mkv'  # Укажите путь к вашему видеофайлу
+    cap = cv2.VideoCapture(video_path)
+
+    paused = False
+
     while True:
-
-
-        # Использование видеоролика
-        video_path = 'black.mkv'  # Укажите путь к вашему видеофайлу
-        cap = cv2.VideoCapture(video_path)
-
-        while True:
+        if not paused:
             ret, img = cap.read()
             if not ret:
                 break
 
-            cv2.imshow('ui', img)  # Показать оригинальное видео
-            update()
+        cv2.imshow('ui', img)  # Показать оригинальное видео
+        update()
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+        key = cv2.waitKey(30) & 0xFF
+        if key == ord('q'):
+            break
+        elif key == ord('p'):
+            paused = not paused
 
     cap.release()
     cv2.destroyAllWindows()
