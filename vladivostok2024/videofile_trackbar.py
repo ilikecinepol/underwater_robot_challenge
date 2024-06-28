@@ -1,3 +1,10 @@
+# Код для создания бинарной маски по заданному цвету из видеоролика.
+# Сначала на подводном аппарате проплываем трассу и делаем запись экрана.
+# Потом в коде указываем путь к видеофайлу и, двигая ползунки, добиваемся эффекта.
+# Для замедления/ускорения видео нажать -/+
+# Для пазуы нажать "Р" (английский)
+
+
 import pymurapi as mur
 import cv2
 import numpy as np
@@ -42,6 +49,7 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(video_path)
 
     paused = False
+    delay = 30  # Начальная задержка между кадрами (в миллисекундах)
 
     while True:
         if not paused:
@@ -52,11 +60,15 @@ if __name__ == '__main__':
         cv2.imshow('ui', img)  # Показать оригинальное видео
         update()
 
-        key = cv2.waitKey(30) & 0xFF
+        key = cv2.waitKey(delay) & 0xFF
         if key == ord('q'):
             break
         elif key == ord('p'):
             paused = not paused
+        elif key == ord('+'):
+            delay = max(1, delay - 10)  # Уменьшение задержки для ускорения видео
+        elif key == ord('-'):
+            delay += 10  # Увеличение задержки для замедления видео
 
     cap.release()
     cv2.destroyAllWindows()
