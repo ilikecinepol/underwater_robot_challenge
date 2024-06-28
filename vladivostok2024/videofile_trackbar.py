@@ -3,6 +3,8 @@
 # Потом в коде указываем путь к видеофайлу и, двигая ползунки, добиваемся эффекта.
 # Для замедления/ускорения видео нажать -/+
 # Для пазуы нажать "Р" (английский)
+# Чтобы сбросить все значения - R
+# Чтобы сохранить цвет - S (нужно ввести в консоль название цвета и переходить к следующему. сохраняется в colors.txt в директории проекта
 
 
 import pymurapi as mur
@@ -12,6 +14,7 @@ import numpy as np
 auv = mur.mur_init()
 img = auv.get_image_bottom()
 
+
 # Функция для обработки изображения
 def process_img(img, name, color):
     hsv_image = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -19,6 +22,7 @@ def process_img(img, name, color):
     cv2.imshow('mask_' + name, img_mask)
     img_mixed = cv2.bitwise_and(img, img, mask=img_mask)
     cv2.imshow(name, img_mixed)
+
 
 # Функция для обновления изображения с трекбаром
 def update(value=0):
@@ -34,6 +38,33 @@ def update(value=0):
     color = (color_low, color_high)
 
     process_img(img, 'img', color)
+
+
+# Функция для сброса ползунков
+def reset_trackbars():
+    cv2.setTrackbarPos('h_min', 'ui', 0)
+    cv2.setTrackbarPos('s_min', 'ui', 0)
+    cv2.setTrackbarPos('v_min', 'ui', 0)
+    cv2.setTrackbarPos('h_max', 'ui', 180)
+    cv2.setTrackbarPos('s_max', 'ui', 255)
+    cv2.setTrackbarPos('v_max', 'ui', 255)
+
+
+# Функция для сохранения текущего состояния в файл
+def save_color(name):
+    h_min = cv2.getTrackbarPos('h_min', 'ui')
+    s_min = cv2.getTrackbarPos('s_min', 'ui')
+    v_min = cv2.getTrackbarPos('v_min', 'ui')
+    h_max = cv2.getTrackbarPos('h_max', 'ui')
+    s_max = cv2.getTrackbarPos('s_max', 'ui')
+    v_max = cv2.getTrackbarPos('v_max', 'ui')
+
+    color_low = (h_min, s_min, v_min)
+    color_high = (h_max, s_max, v_max)
+
+    with open('colors.txt', 'a') as f:
+        f.write(f"'{name}': {color_low, color_high}\n")
+
 
 if __name__ == '__main__':
     cv2.namedWindow('ui')
@@ -69,6 +100,11 @@ if __name__ == '__main__':
             delay = max(1, delay - 10)  # Уменьшение задержки для ускорения видео
         elif key == ord('-'):
             delay += 10  # Увеличение задержки для замедления видео
+        elif key == ord('r'):
+            reset_trackbars()
+        elif key == ord('s'):
+            color_name = input("Enter color name: ")
+            save_color(color_name)
 
     cap.release()
     cv2.destroyAllWindows()
