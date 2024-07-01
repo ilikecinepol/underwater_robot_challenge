@@ -1,16 +1,40 @@
-# Пример выделения контуров объектов по заданным цветам.
-
 import cv2
-import pymurapi as mur
 import numpy as np
-import math
+import pymurapi as mur
 import time
+import math
 
 auv = mur.mur_init()
 
 robot = 'simulator'
-camera = 'bottom'
-if robot == 'simulator':
+if robot != 'simulator':
+    mur_view = auv.get_videoserver()
+
+cap0 = cv2.VideoCapture(1)
+cap1 = cv2.VideoCapture(0)
+if robot == 68:
+    course_motor1 = 2
+    course_motor2 = 1
+    depth_motor_1 = 3
+    depth_motor_2 = 0
+    stepper_motor = 4
+    colors = {
+        'red': ((110, 31, 0), (178, 255, 255)),
+        'orange': ((14, 83, 83), (52, 199, 194)),
+        'black': ((94, 99, 30), (106, 195, 59)),
+    }
+elif robot == 70:
+    course_motor1 = 1
+    course_motor2 = 2
+    depth_motor_1 = 3
+    depth_motor_2 = 0
+    stepper_motor = 4
+    colors = {
+        'red': ((110, 31, 0), (178, 255, 255)),
+        'orange': ((14, 83, 83), (52, 199, 194)),
+        'black': ((94, 99, 30), (106, 195, 59)),
+    }
+elif robot == 'simulator':
     course_motor1 = 0
     course_motor2 = 1
     depth_motor_1 = 2
@@ -18,89 +42,18 @@ if robot == 'simulator':
     stepper_motor = 4
     img = auv.get_image_bottom()
     colors = {
-        'red': ((172, 75, 64), (180, 250, 191)),
+        'red': ((146, 14, 0), (180, 255, 241)),
         'orange': ((8, 0, 0), (13, 255, 255)),
-        'yellow': ((18, 150, 135), (42, 255, 255)),
+        'yellow': ((18, 75, 92), (93, 255, 255)),
         'black': ((0, 0, 1), (180, 255, 86))
     }
-elif robot == 'robot':
-    course_motor1 = 2
-    course_motor2 = 1
-    depth_motor_1 = 3
-    depth_motor_2 = 0
-    stepper_motor = 4
-    if camera == 'bottom':
-        vid = cv2.VideoCapture(0)
-
-    else:
-        vid = cv2.VideoCapture(1)
-
-    ok, frame0 = vid.read()
-    frame0 = cv2.resize(frame0, (320, 240))
-    img = frame0
-    mur_view = auv.get_videoserver()
-    colors = {
-        'red': ((25, 68, 91), (176, 193, 205)),
-        'orange': ((175, 151, 139), (177, 170, 210)),
-        'yellow': ((24, 31, 34), (67, 255, 233)),
-        'black': ((0, 0, 0), (0, 0, 20))
-    }
-
 
 ellipce_area = 0
 i_component = 0
 last_error = 0
-
-# координаты центра изображения
-
-h, w = img.shape[0], img.shape[1]
-x_goal, y_goal = int(w / 2), int(h / 2)
-depth = 3
-
-
-def find_contours(img, color):
-    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    img_mask = cv2.inRange(img_hsv, color[0], color[1])
-    contours, _ = cv2.findContours(img_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    return contours
-
-
-def get_cnt_xy(contour):
-    moments = cv2.moments(contour)
-    x = int(moments['m10'] / moments['m00'])
-    y = int(moments['m01'] / moments['m00'])
-    return x, y
-
-
-def draw_object_contour(drawing, contour, name):
-    if cv2.contourArea(contour) < 500:
-        return
-
-    line_color = (0, 0, 255)
-    cv2.drawContours(drawing, [contour], 0, line_color, 2)
-
-    moments = cv2.moments(contour)
-
-    x, y = get_cnt_xy(contour)
-
-    if x != None and y != None:
-        cv2.circle(drawing, (x, y), 4, line_color, -1)
-        font = cv2.FONT_HERSHEY_DUPLEX
-        cv2.putText(drawing, name, (x - 30, y + 30), font, 0.75, (0, 0, 0), 1)
-        # go_to_goal(x, y)
-
-
-def get_contour_xy(cnt):
-    try:
-        moments = cv2.moments(cnt)
-        line_color = (125, 0, 125)
-        x = int(moments['m10'] / moments['m00'])
-        y = int(moments['m01'] / moments['m00'])
-        cv2.circle(drawing, (x, y), 4, line_color, -1, cv2.LINE_AA)
-        return x, y
-    except:
-        return 0
+max_area = 50
+depth = 3.3
+max_depth = depth + 0.5
 
 
 def limiter(value, min=-100, max=100):
@@ -111,8 +64,8 @@ def moving(linear_x=0, linear_y=0, linear_z=0, angular_x=0, angular_y=0, angular
     global course_motor1, course_motor2, depth_motor1, depth_motor2, stepper_motor
     auv.set_motor_power(course_motor1, limiter(linear_x) + angular_z)
     auv.set_motor_power(course_motor2, limiter(linear_x) - angular_z)
-    auv.set_motor_power(depth_motor_1, limiter(linear_z))
-    auv.set_motor_power(depth_motor_2, limiter(linear_z))
+    auv.set_motor_power(depth_motor_1, limiter(linear_z) + angular_x)
+    auv.set_motor_power(depth_motor_2, limiter(linear_z) - angular_x)
     auv.set_motor_power(stepper_motor, limiter(linear_y))
 
 
@@ -135,19 +88,17 @@ def to_360(angle):
     return angle if angle > 0.0 else angle + 360.0
 
 
-def keep_angle(goal_angle, p=0.2, i=0.5, d=0.01):
-    current_angle = to_360(auv.get_yaw())
-    print('current_angle:', current_angle)
-    goal_angle = to_360(goal_angle)
-    print('goal_angle:', goal_angle)
-    power = pid_controller(to_360(current_angle), to_360(goal_angle), p=p, i=i, d=d)
-    return power
-
-
 def keep_depth(goal_depth=0, p=-50, i=-5, d=0.1):
     current_depth = auv.get_depth()
     # print('current_depth', current_depth)
     power = pid_controller(current_depth, goal_depth, p=p, i=i, d=d)
+    return limiter(power)
+
+
+def keep_pitch(goal_pitch=0, p=-50, i=-5, d=0.1):
+    current_pitch = auv.get_pitch()
+    # print('current_pitch:', current_pitch)
+    power = pid_controller(current_pitch, goal_pitch, p=p, i=i, d=d)
     return limiter(power)
 
 
@@ -158,7 +109,7 @@ def rad_to_deg(rad):
 def go_to_goal(x_goal, y_goal, x=160, y=120, k_lin=0.3, k_ang=-0.2):
     yaw = auv.get_yaw()
     distance = abs(math.sqrt(((x_goal - x) ** 2) + ((y_goal - y) ** 2)))
-    k_lin = -k_lin if y_goal - y > 0 else k_lin
+    k_lin = -1.5 * k_lin if y_goal - y > 0 else k_lin
     k_ang = -k_ang if x_goal - x > 0 else k_ang
     linear_speed = limiter(distance * k_lin)
     if distance > 1:
@@ -170,60 +121,59 @@ def go_to_goal(x_goal, y_goal, x=160, y=120, k_lin=0.3, k_ang=-0.2):
     return linear_speed, angular_speed
 
 
-def get_picture(robot='simulator', camera='bottom'):
-    # print(robot, camera)
+def keep_angle(goal_angle, p=0.2, i=0.5, d=0.01):
+    current_angle = to_360(auv.get_yaw())
+    # print('current_angle:', current_angle)
+    goal_angle = to_360(goal_angle)
+    # print('goal_angle:', goal_angle)
+    power = pid_controller(to_360(current_angle), to_360(goal_angle), p=p, i=i, d=d)
+    return power
+
+
+def get_img(camera, mask_bottom=True):
     if robot == 'simulator':
-        if camera == 'bottom':
-            img = auv.get_image_bottom()
-
-        elif camera == 'front':
-            img = auv.get_image_front()
-        cv2.imshow('drawing', img)
-        cv2.waitKey(1)
-    elif 'robot' == robot:
-
-        print('выбрана камера на роботе')
-        # mur_view = auv.get_videoserver()
-        ok, frame0 = vid.read()
+        img = auv.get_image_bottom()
+    else:
+        if camera == 'front':
+            ok, frame0 = cap1.read()
+        else:
+            ok, frame0 = cap0.read()
         frame0 = cv2.resize(frame0, (320, 240))
         img = frame0
-        # mur_view.show(img)
 
-    # cv2.line(img, (160, 0), (160, 240), (0, 0, 255), 2)
-    # cv2.line(img, (0, 120), (320, 120), (0, 0, 255), 2)
+    if mask_bottom:
+        # Закрываем нижние 20% изображения маской
+        height, width, _ = img.shape
+        mask_height = int(height * 0.2)  # Измените значение по необходимости
+        mask = np.zeros((height, width), dtype=np.uint8)
+        mask[:height - mask_height, :] = 255
+        img = cv2.bitwise_and(img, img, mask=mask)
 
     return img
 
 
-def get_biggest_cnt(img, cnt_color, max_area=0):
-    shape_name = None
-    global ellipce_area
-    color_status = None
-    biggest_cnt = None
-    biggest_area = 0
-    for name in colors:
-        contours = find_contours(img, colors[name])
-
-        if not contours:
-            continue
-
-        for cnt in contours:
-            draw_object_contour(img, cnt, name)
-            # Process contour
-            area, shape_name, drawing = process_cnt(cnt, img)
-
-            if name == cnt_color:
-                color_status = cnt_color
-
-                if area > biggest_area and area > max_area:
-                    biggest_area = area
-                    biggest_cnt = cnt
-    print('contour: area = ', biggest_area, 'shape = ', shape_name, 'color = ', color_status)
-    return biggest_cnt, biggest_area, shape_name, color_status
+def get_cnt_xy(contour):
+    moments = cv2.moments(contour)
+    x = int(moments['m10'] / moments['m00'])
+    y = int(moments['m01'] / moments['m00'])
+    return x, y
 
 
-def process_cnt(cnt, img):
-    global ellipce_area
+def find_contours(image, color, approx=cv2.CHAIN_APPROX_SIMPLE):
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv_image, color[0], color[1])
+    contours, _ = cv2.findContours(mask, cv2.RETR_CCOMP, approx)
+
+    return contours
+
+
+def img_process(img, cnt, color):
+    global colors, ellipce_area
+    font = cv2.FONT_HERSHEY_PLAIN
+
+    if cnt is None or len(cnt) == 0:
+        return img, color, None
+
     area = cv2.contourArea(cnt)
     drawing = np.zeros_like(img)
 
@@ -239,13 +189,9 @@ def process_cnt(cnt, img):
     circle_area = circle_radius ** 2 * math.pi
     circle = cv2.minAreaRect(cnt)
     circ_w, circ_h = circle[1][0], circle[1][1]
-    # aspect_ratio = max(circ_w, circ_h) / min(circ_w, circ_h)
 
     # Описанный прямоугольник (с вращением)
     rectangle = cv2.minAreaRect(cnt)
-    # print('rectangle = ', rectangle)
-
-    # Получим контур описанного прямоугольника
     box = cv2.boxPoints(rectangle)
     box = np.int0(box)
 
@@ -265,251 +211,364 @@ def process_cnt(cnt, img):
     except:
         triangle_area = 0
 
-    # Описанный элипс
-    try:
-        ellipce = cv2.fitEllipse(cnt)
-        (ellipce_x, ellipce_y), (ellipce_h, elllipce_w), ellipce_angle = ellipce
-        ellipce_area = math.pi * (ellipce_h / 2) * (elllipce_w / 2)
-        cv2.ellipse(drawing, ellipce, (255, 0, 0), 2)
-    except:
-        pass
+    # Описанный эллипс
+    # try:
+    #     ellipce = cv2.fitEllipse(cnt)
+    #     (ellipce_x, ellipce_y), (ellipce_h, elllipce_w), ellipce_angle = ellipce
+    #     ellipce_area = math.pi * (ellipce_h / 2) * (elllipce_w / 2)
+    #     cv2.ellipse(drawing, ellipce, (255, 0, 0), 2)
+    # except:
+    #     pass
 
     # Заполним словарь, который будет содержать площади каждой из описанных фигур
     shapes_areas = {
-        'ellipse' if aspect_ratio > 1.25 else 'circle': ellipce_area,
+        # 'ellipse' if aspect_ratio > 1.25 else 'circle': ellipce_area,
         'rectangle' if aspect_ratio > 1.25 else 'square': rectangle_area,
         'triangle': triangle_area,
         'circle': circle_area,
     }
 
     # Теперь заполним аналогичный словарь, который будет содержать
-    # разницу между площадью контора и площадью каждой из фигур.
+    # разницу между площадью контура и площадью каждой из фигур.
     diffs = {
         name: abs(area - shapes_areas[name]) for name in shapes_areas
     }
 
-    # Получаем имя фигуры с наименьшей разницой площади.
+    # Получаем имя фигуры с наименьшей разницей площади.
     shape_name = min(diffs, key=diffs.get)
 
     line_color = (0, 100, 255)
 
     # Нарисуем соответствующую описанную фигуру вокруг контура
 
-    if shape_name == 'circle':
-        cv2.circle(drawing, (int(circle_x), int(circle_y)), int(circle_radius), line_color, 2, cv2.LINE_AA)
-
-    if shape_name == 'rectangle' or shape_name == 'square':
-        cv2.drawContours(drawing, [box], 0, line_color, 2, cv2.LINE_AA)
-
-    if shape_name == 'triangle':
-        cv2.drawContours(drawing, [triangle], 0, line_color, 2, cv2.LINE_AA)
-
-    if shape_name == 'ellipce':
-        cv2.drawContours(drawing, ellipce, 0, line_color, 2, cv2.LINE_AA)
-
     # вычислим центр, нарисуем в центре окружность и ниже подпишем
     # текст с именем фигуры, которая наиболее похожа на исследуемый контур.
 
-    moments = cv2.moments(cnt)
+    if cnt is not None and len(cnt) > 0:
+        cnt = cnt  # Убираем извлечение первого элемента, так как он уже есть
+        try:
+            area = cv2.contourArea(cnt)
 
-    try:
-        x = int(moments['m10'] / moments['m00'])
-        y = int(moments['m01'] / moments['m00'])
-        cv2.circle(drawing, (x, y), 4, line_color, -1, cv2.LINE_AA)
+            if area > 10:
+                x, y = get_cnt_xy(cnt)
+                cv2.circle(img, (x, y), 4, (0, 0, 250), -1)
+                line_color = (0, 100, 255)
 
-        # font = cv2.FONT_HERSHEY_SIMPLEX
-        # cv2.putText(drawing, shape_name, (x - 40, y + 31), font, 1, (0, 0, 0), 4, cv2.LINE_AA)
-        # cv2.putText(drawing, shape_name, (x - 41, y + 30), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
-    except ZeroDivisionError:
-        pass
+                # Нарисуем соответствующую описанную фигуру вокруг контура
 
-    return area, shape_name, drawing
+                if shape_name == 'circle':
+                    cv2.circle(img, (int(circle_x), int(circle_y)), int(circle_radius), line_color, 2, cv2.LINE_AA)
 
+                if shape_name == 'rectangle' or shape_name == 'square':
+                    cv2.drawContours(img, [box], 0, line_color, 2, cv2.LINE_AA)
 
-def calc_angle(drawing, cnt):
-    try:
-        rectangle = cv2.minAreaRect(cnt)
+                if shape_name == 'triangle':
+                    cv2.drawContours(img, [triangle], 0, line_color, 2, cv2.LINE_AA)
 
-        box = cv2.boxPoints(rectangle)
-        box = np.int0(box)
-        cv2.drawContours(drawing, [box], 0, (0, 255, 0), 3)
+                # if shape_name == 'ellipce':
+                #     cv2.drawContours(img, ellipce, 0, line_color, 2, cv2.LINE_AA)
+                cv2.putText(img, '{}'.format(color), (x, y), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(img, '{}'.format(shape_name), (x, y + 20), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
-        # К сожалению, мы не можем использовать тот угол,
-        # который входит в вывод функции minAreaRect,
-        # т.к. нам необходимо ориентироваться именно по
-        # длинной стороне полоски. Находим длинную сторону.
-
-        edge_first = np.int0((box[1][0] - box[0][0], box[1][1] - box[0][1]))
-        edge_second = np.int0((box[2][0] - box[1][0], box[2][1] - box[1][1]))
-
-        edge = edge_first
-        if cv2.norm(edge_second) > cv2.norm(edge_first):
-            edge = edge_second
-
-        # Вычисляем угол по длинной стороне.
-        angle = -((180.0 / math.pi * math.acos(edge[0] / (cv2.norm((1, 0)) * cv2.norm(edge)))) - 90)
-
-        return angle if not math.isnan(angle) else 0
-    except:
-        return 0
+        except:
+            pass
+    return color, cnt, shape_name
 
 
-def diving_orange_circle(cnt_color, error_position):
-    global depth
+def get_single_cnt(img, cnt_color, max_area=50):
+    biggest_cnt = None
+    biggest_area = 0
+    biggest_color = None
+
+    contours = find_contours(img, colors[cnt_color])
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+
+        if area > biggest_area:
+            biggest_area = area
+            biggest_cnt = cnt
+            biggest_color = cnt_color
+
+    return biggest_cnt, biggest_area, biggest_color
+
+
+def get_second_largest_cnt(img, cnt_color, max_area=50):
+    largest_cnt = None
+    largest_area = 0
+    second_largest_cnt = None
+    second_largest_area = 0
+
+    contours = find_contours(img, colors[cnt_color])
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area > largest_area:
+            # Обновляем второй по величине контур, когда находим новый самый большой контур
+            second_largest_area = largest_area
+            second_largest_cnt = largest_cnt
+            # Обновляем самый большой контур
+            largest_area = area
+            largest_cnt = cnt
+        elif area > second_largest_area:
+            # Обновляем второй по величине контур, если найденная площадь больше текущего второго
+            second_largest_area = area
+            second_largest_cnt = cnt
+
+    return second_largest_cnt, second_largest_area, cnt_color
+
+
+def get_biggest_cnt(img):
+    global max_area, colors
+    biggest_cnt = None
+    biggest_area = 0
+    biggest_color = None
+
+    for color in colors:
+        contours = find_contours(img, colors[color])
+
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > biggest_area:
+                biggest_area = area
+                biggest_cnt = cnt
+                biggest_color = color
+
+    # print('biggest_color is', biggest_color)
+    return biggest_cnt, biggest_area, biggest_color
+
+
+def go_to_figure(color, p_ang=0.05, p_depth=-30, error_position=30):
+    global depth, colors
     count = 0
-    while count < 200:
-        img = get_picture()
-        biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
+    t1 = time.time()
+    while count < 100:
+        img = get_img(camera='front', mask_bottom=True)
+        if color == 'red':
 
-        if biggest_area > 100:
+            biggest_cnt, biggest_area, biggest_color = get_single_cnt(img, color)
+            second_largest_cnt, second_largest_area, cnt_color = get_second_largest_cnt(img, color)
+            x1, y1 = get_cnt_xy(biggest_cnt)
+            try:
+                x2, y2 = get_cnt_xy(second_largest_cnt)
+                if y2 < y1 and abs(y2 - y1) > 100 and y2 < 120:
+                    biggest_cnt, biggest_area, biggest_color = second_largest_cnt, second_largest_area, cnt_color
+                    cv2.circle(img, (x2, y2), 4, (0, 0, 250), -1)
+            except:
+                pass
+        else:
+            biggest_cnt, biggest_area, biggest_color = get_single_cnt(img, color)
+        if biggest_cnt is not None:
+            col, contour, shape = img_process(img, biggest_cnt, biggest_color)
             x, y = get_cnt_xy(biggest_cnt)
-            lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.7, k_ang=0.01)
-            lin_z = keep_depth(depth, p=-40)
+            lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.1, k_ang=p_ang)
+            lin_z = keep_depth(depth, p=p_depth)
+            if time.time() - t1 < 1:
+                lin_x = 0
             moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
             if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
                 count += 1
-                print('count = ', count)
+                # print('count = ', count)
             else:
                 count = 0
+            img_out(img)
+    return shape, color
 
 
-# def turn_to_line(cnt_color, error_position):
-#     global depth
-#     count = 0
-#     while count < 200:
-#         img = get_picture()
-#         biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
-#
-#         if biggest_area > 50:
-#             x, y = get_cnt_xy(biggest_cnt)
-#             lin_y, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.5, k_ang=0.1)
-#             lin_z = keep_depth(depth, p=-40)
-#             moving(linear_x=10, angular_z=ang_z, linear_z=lin_z)
-#             # print('main circle')
-#             if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
-#                 count += 1
-#                 print('count = ', count)
-#             else:
-#                 count = 0
+def img_out(img):
+    if robot == 'simulator':
+        cv2.imshow('Out', img)
+        cv2.waitKey(1)
+    else:
+        mur_view.show(img, 0)
 
 
-def move_line(cnt_color):
-    global depth, robot, camera
-    count = 0
+def move_line(target_counto, p_lin=0.1, p_ang=0.05, stop_color1='orange', stop_color2='black'):
+    print('move line {}'.format(target_counto))
+    global depth, robot
+    if robot != 'simulator':
+        auv.set_on_delay(0.5)
+        auv.set_off_delay(0)
+        auv.set_rgb_color(255, 255, 255)
     counto = 0
+
+
     while True:
-        img = get_picture(camera=camera, robot=robot)
-        biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
-        if biggest_area > 500:
-            rect = cv2.minAreaRect(biggest_cnt)
+        img = get_img(camera='front')
+        # ('wait {} color'.format(stop_color1))
+        biggest_cnt, biggest_area, biggest_color = get_biggest_cnt(img)
+        # print(dt, dt_max)
+        current_yaw = to_360(auv.get_yaw())
+        print('counto {}'.format(counto))
+        if biggest_cnt is not None and biggest_color == 'red':
+            color, contour, shape = img_process(img, biggest_cnt, biggest_color)
+
+            rect = cv2.minAreaRect(contour)
             box = cv2.boxPoints(rect)
             box = np.int0(box)
             cv2.drawContours(img, [box], 0, (0, 0, 255), 2)
 
             # Определяем координаты вершин верхнего ребра
-            top_left_vertex = box[1]
-            top_right_vertex = box[0]
+
+            # Сортируем вершины по координате y
+            sorted_vertices = box[np.argsort(box[:, 1])]
+            # Из первых двух вершин выбираем те, которые имеют меньшую y координату
+            bottom_width_points = sorted_vertices[:2]
+            # print(bottom_width_points)
+
+            top_left_vertex = bottom_width_points[0]
+            top_right_vertex = bottom_width_points[1]
 
             # Вычисляем координаты середины верхнего ребра
             midpoint_x = (top_left_vertex[0] + top_right_vertex[0]) // 2
             midpoint_y = (top_left_vertex[1] + top_right_vertex[1]) // 2
+            cv2.circle(img, (midpoint_x, midpoint_y), 4, (0, 255, 250), -1)
 
-            lin_y, ang_z = go_to_goal(x_goal=midpoint_x, y_goal=midpoint_y, k_lin=0, k_ang=0.1)
-            # angle = calc_angle(img, biggest_cnt)
-            # ang_z = keep_angle(angle, p=-0.2)
-            lin_z = keep_depth(depth, p=-40)
-            lin_x = 5
-            moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
-            # print(angle)
+            lin_y, ang_z = go_to_goal(x_goal=midpoint_x, y_goal=midpoint_y, k_lin=p_lin, k_ang=p_ang)
+            lin_z = keep_depth(depth, p=-30)
+            ang_x = keep_pitch(0, p=0.5)
+            lin_x = 10
+            moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z, angular_x=ang_x)
             counto += 1
-            # print(count)
-            # print(counto)
-            print('counto = ', counto)
-            if is_contour(img, 'square', 'yellow') and counto > 200:
-                count += 1
-                if count > 200:
-                    counto = 0
-                    return 'yellow'
+
+        elif counto > target_counto and (biggest_color == stop_color2 or biggest_color == stop_color1):
+            return biggest_color, current_yaw
+            # print('stop')
 
 
-            elif is_contour(img, 'square', 'black') and counto > 200:
-                count += 1
-                if count > 100:
-                    counto = 0
-                    return 'black'
-
-            # elif is_contour(img, 'triangle', 'black') and counto > 200:
-            #     count += 1
-            #     if count > 200:
-            #         counto = 0
-            #         return 'black'
+        img_out(img)
 
 
-            elif is_contour(img, 'triangle', 'yellow') and counto > 200:
-                count += 1
-                if count > 200:
-                    counto = 0
-                    return 'yellow'
-
-            # if not is_contour(img, 'rectange', 'red') or not is_contour('triangle', 'red'):
-            #     if is_contour(img, 'rectangle', 'yellow') or is_contour(img,'triangle', 'yellow'):
-            #         return 'yellow'
-            #     elif is_contour(img, 'triangle', 'black'):
-            #         return 'black'
-            #     print('line exit')
-            # mur_view.show(img)
-
-
-
-
-
-# Функция поиска нужного контура
-def is_contour(img, figure, cnt_color):
-    if cnt_color == 'black':
-        max_area = 600
-    else:
-        max_area = 0
-    biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color, max_area)
-    # cv2.imshow('d', img)
-    # cv2.waitKey(1)
-    # print(shape, cnt_color)
-    if shape == figure and color == cnt_color:
-        return True
-    else:
-        return False
-
-
-def number(img, shape):
-    biggest_cnt, biggest_area, shape = get_biggest_cnt(img)
-    box = cv2.boxPoints(shape)
-    print(box)
+# def go_to_figure(color, p_ang=0.05, p_depth=-30, error_position=30):
+#     global depth, colors
+#     count = 0
+#     t1 = time.time()
+#
+#     while count < 100:
+#         img = get_img(camera='front', mask_bottom=True)
+#         if color == 'red':
+#
+#             biggest_cnt, biggest_area, biggest_color = get_single_cnt(img, color)
+#             second_largest_cnt, second_largest_area, cnt_color = get_second_largest_cnt(img, color)
+#             x1, y1 = get_cnt_xy(biggest_cnt)
+#             try:
+#                 x2, y2 = get_cnt_xy(second_largest_cnt)
+#                 if y2 < y1 and abs(y2 - y1) > 100 and y2 < 120:
+#                     biggest_cnt, biggest_area, biggest_color = second_largest_cnt, second_largest_area, cnt_color
+#                     cv2.circle(img, (x2, y2), 4, (0, 0, 250), -1)
+#             except:
+#                 pass
+#         else:
+#             biggest_cnt, biggest_area, biggest_color = get_single_cnt(img, color)
+#         if biggest_cnt is not None:
+#             col, contour, shape = img_process(img, biggest_cnt, biggest_color)
+#             x, y = get_cnt_xy(biggest_cnt)
+#             lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.1, k_ang=p_ang)
+#             lin_z = keep_depth(depth, p=p_depth)
+#             if time.time() - t1 < 1:
+#                 lin_x = 0
+#             moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
+#             if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
+#                 count += 1
+#                 # print('count = ', count)
+#             else:
+#                 count = 0
+#             img_out(img)
+#     return shape, color
 
 
-def diving_yellow_square(cnt_color, error_position):
-    global depth
+def go_to_figure(color,p_lin=0.1, p_ang=0.05, p_depth=-30, error_position=30):
+    print('go_to_figure  {}'.format(color))
+    global depth, colors
     count = 0
-    while count < 100:
-        img = get_picture()
-        biggest_cnt, biggest_area, shape, color = get_biggest_cnt(img, cnt_color)
+    t1 = time.time()
 
-        if biggest_area > 100:
+    while count < 100:
+        img = get_img(camera='front', mask_bottom=True)
+        biggest_cnt, biggest_area, biggest_color = get_single_cnt(img, color)
+        if biggest_cnt is not None:
+            col, contour, shape = img_process(img, biggest_cnt, biggest_color)
             x, y = get_cnt_xy(biggest_cnt)
-            lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=0.25, k_ang=0.1)
-            lin_z = keep_depth(depth, p=-40)
+            lin_x, ang_z = go_to_goal(x_goal=x, y_goal=y, k_lin=p_lin, k_ang=p_ang)
+            lin_z = keep_depth(depth, p=p_depth)
+            if time.time() - t1 < 1:
+                lin_x = 0
             moving(linear_x=lin_x, angular_z=ang_z, linear_z=lin_z)
-            if abs(x - 160) < error_position and abs(lin_z) < 10:
+            if abs(y - 120) < error_position and abs(x - 160) < error_position and abs(lin_z) < 10:
                 count += 1
-                print('count = ', count)
+                # print('count = ', count)
             else:
                 count = 0
-    auv.drop()
+        img_out(img)
+    return shape, color
 
+
+def action(color, shape, target_yaw):
+    print('action {}'.format(shape))
+    global robot
+    # print(shape, color)
+    if robot != 'simulator':
+        if color == 'black':
+            auv.set_on_delay(0.5)
+            auv.set_off_delay(0)
+            auv.set_rgb_color(255, 0, 0)
+        elif color == 'orange' or color == 'yellow' and shape == 'square':
+            auv.set_on_delay(0.5)
+            auv.set_off_delay(0)
+            auv.set_rgb_color(0, 255, 0)
+            t1 = time.time()
+            if (time.time() - t1) < 10:
+                auv.set_on_delay(0)
+                auv.set_off_delay(0.5)
+
+    if shape == 'square' and color != 'black':
+        t1 = time.time()
+        while time.time() - t1 < 5:
+            lin_z = keep_depth(max_depth)
+            moving(linear_z=lin_z)
+        while time.time() - t1 < 12:
+            lin_z = keep_depth(depth)
+            moving(linear_z=lin_z)
+    elif color == 'orange' or color == 'yellow' and shape == 'triangle':
+        t1 = time.time()
+        while time.time() - t1 < 10:
+            moving(angular_z=20)
+        count = 0
+        while count < 200:
+            current_yaw = to_360(auv.get_yaw())
+            ang_z = keep_angle(target_yaw, p=0.1)
+            moving(angular_z=ang_z)
+            if abs(current_yaw - to_360(target_yaw)) < 15:
+                count += 1
+            else:
+                count = 0
+
+
+def last_funk(target_yaw):
+    count = 0
+    while count < 200:
+        current_yaw = to_360(auv.get_yaw())
+        lin_z = keep_depth(depth)
+        ang_z = keep_angle(target_yaw)
+        moving(linear_z=lin_z, angular_z=ang_z)
+        if abs(current_yaw - target_yaw) < 5:
+            count += 1
+        else:
+            count = 0
+        t1 = time.time()
+    # while time.time() - t1 < 3:
+    #     moving(linear_x=15)
+    #     print('m')
 
 
 if __name__ == '__main__':
-    diving_orange_circle('orange', error_position=30)
-    for i in range(6):
-        col = move_line('red')
-        print(col)
-        diving_yellow_square(col, 30)
-        # mur_view.show(img, 0)
+    go_to_figure('orange', p_ang=0.03, p_depth=-20, error_position=30)
+    for sensor in range(6):
+        go_to_figure('red', p_ang=0.03,p_lin=0.05, p_depth=-20, error_position=50)
+
+        col, c_yaw = move_line(target_counto=100, p_ang=0.08,p_lin=0.2, stop_color1='yellow', stop_color2='black')
+
+        shape, color = go_to_figure(col, p_ang=0.03, p_depth=-20, error_position=30)
+        action(color, shape, c_yaw)
+        # shape, color = go_to_figure(col, p_ang=0.03, p_depth=-20, error_position=30)
+        last_funk(c_yaw)
